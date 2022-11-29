@@ -31,9 +31,7 @@ bool DEBUG = true;
 //UDP server
 WiFiUDP Udp;
 
-// Variables to save state of LEDs
-String output26State = "off";
-String output27State = "off";
+
 
 const int output26 = 26;
 const int output27 = 27;
@@ -45,7 +43,7 @@ char replyBuffer[1024];
 String strBuff = "";
 
 // Variable to determine if a delay is in use
-String delayFlag = false;
+boolean delayFlag = false;
 
 // update state
 void update_server_state(String new_state){
@@ -57,6 +55,20 @@ void update_server_state(String new_state){
     Serial.println(new_state);
   }
   server_state = new_state;
+
+  if(new_state == "SYN_RECEIVED"){
+    ledOn(output26);    
+  }
+  if(new_state == "ESTABLISHED"){
+    ledOn(output27);
+  }
+  if(new_state == "CLOSE_WAIT"){
+    ledBlink(output27);    
+  }
+  if(new_state == "CLOSED"){
+    ledOff(output26);
+    ledOff(output27);
+  }
 }
 
 void ledOff(int led_builtin){
@@ -68,9 +80,9 @@ void ledOn(int led_builtin){
 }
 
 void ledBlink(int led_builtin){
-  digitialWrite(led_builtin, HIGH);
+  digitalWrite(led_builtin, HIGH);
   delay(333);
-  digitialWrite(led_builtin, LOW);
+  digitalWrite(led_builtin, LOW);
   delay(333);
 }
 
@@ -113,6 +125,20 @@ void print_received(char received[]){
   Serial.print(received[65]);
   Serial.print(", fin = ");
   Serial.println(received[66]);
+}
+
+void recvOneChar() {
+    if (Serial.available() > 0) {
+        char receivedChar = Serial.read();
+        Serial.print("Received the character:");
+        Serial.println(receivedChar);
+        if (receivedChar == '0'){
+          delayFlag = false;                    
+        } else if (receivedChar == '1'){
+          delayFlag = true;
+        }
+        
+    }
 }
 
 
@@ -165,11 +191,10 @@ void loop() {
      * the server is changed to state SYN_RECEIVED.
      */
 
-     // clear string buffer
-     strBuff = "";
-
-
-
+    // clear string buffer
+    strBuff = "";
+    ledBlink(output26); 
+    recvOneChar();
     // receive message from the UDP server
     int packetSize = Udp.parsePacket();
 
@@ -274,6 +299,9 @@ void loop() {
         
         // update state to SYN_RECEIVED
         update_server_state("SYN_RECEIVED");
+        if(delayFlag){
+          delay(1000);
+        }
       }
     }
   } else if (server_state == "SYN_RECEIVED"){
@@ -304,6 +332,9 @@ void loop() {
       // if header.ACK = 1
       if (packetBuffer[65] == '1'){
         update_server_state("ESTABLISHED");
+        if(delayFlag){
+          delay(1000);
+        }
       }
     }      
   } else if (server_state == "ESTABLISHED"){
@@ -407,6 +438,9 @@ void loop() {
 
         // update state to CLOSE_WAIT
         update_server_state("CLOSE_WAIT");
+        if(delayFlag){
+          delay(1000);
+        }
       } else{
 
         // get BODY of packet and print message
@@ -494,7 +528,7 @@ void loop() {
   } else if (server_state == "CLOSE_WAIT"){
     // create a new ACK message to send back
     uint8_t replyHeader[96];
-    
+    ledBlink(output27);
     if (DEBUG){
       //Serial.println("Inside CLOSE_WAIT - ");
     }
@@ -570,6 +604,7 @@ void loop() {
   } else if (server_state == "LAST_ACK"){
     int packetSize = Udp.parsePacket();
 
+    ledBlink(output27);
     if (DEBUG){
       //Serial.println("Inside LAST_ACK - ");
     }
