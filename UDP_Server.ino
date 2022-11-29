@@ -42,8 +42,10 @@ const int output27 = 27;
 char packetBuffer[1024];
 char replyBuffer[1024];
 
+String strBuff = "";
+
 // Variable to determine if a delay is in use
-String delayFlag = "off";
+String delayFlag = false;
 
 // update state
 void update_server_state(String new_state){
@@ -57,8 +59,24 @@ void update_server_state(String new_state){
   server_state = new_state;
 }
 
+void ledOff(int led_builtin){
+  digitalWrite(led_builtin, LOW);
+}
+
+void ledOn(int led_builtin){
+  digitalWrite(led_builtin, HIGH);
+}
+
+void ledBlink(int led_builtin){
+  digitialWrite(led_builtin, HIGH);
+  delay(333);
+  digitialWrite(led_builtin, LOW);
+  delay(333);
+}
+
 void print_received(char received[]){
-  Serial.println("Received Packet From Client");
+  Serial.print("Received Packet From Client ");
+  Serial.println(Udp.remoteIP());
 
   int header_seq_num = 0;
   for (int bit =0; bit < 32; bit++){
@@ -146,6 +164,11 @@ void loop() {
      * SYN=1, the server responds with SYN=1 and ACK=1. After sending the SYN ACK,
      * the server is changed to state SYN_RECEIVED.
      */
+
+     // clear string buffer
+     strBuff = "";
+
+
 
     // receive message from the UDP server
     int packetSize = Udp.parsePacket();
@@ -267,7 +290,7 @@ void loop() {
         packetBuffer[len] = 0;
       }
       if (DEBUG){
-        Serial.println("Inside SYN_RECEIVED - ");
+        //Serial.println("Inside SYN_RECEIVED - ");
         print_received(packetBuffer);
       }
 
@@ -306,12 +329,8 @@ void loop() {
       }
       last_received_seq_num = header_seq_num;
       if (DEBUG){
-        Serial.println("Inside ESTABLISHED - ");
+        //Serial.println("Inside ESTABLISHED - ");
         print_received(packetBuffer);
-        Serial.print("last received seq num = ");
-        Serial.print(header_seq_num);
-        Serial.print(" and ");
-        Serial.println(last_received_seq_num);
       }
 
               // create a new ACK message to send back
@@ -320,10 +339,7 @@ void loop() {
       // if FIN =1 then send back ack and move to close wait
       if (packetBuffer[66] == '1'){
 
-        if (DEBUG){
-          Serial.print("In FIN=1 of ESTABLISHED");
-        }
-                // set sequence number
+        // set sequence number
         byte num = last_sent_ack_num;
         for (byte i=0; i<32; i++) {
           replyHeader[31-i] = bitRead(num, i);
@@ -393,29 +409,20 @@ void loop() {
         update_server_state("CLOSE_WAIT");
       } else{
 
-        if (DEBUG){
-          Serial.println("In else of ESTABLISHED");
-
-        }
-
         // get BODY of packet and print message
         String msg;
-        
+        int x = 0;
         for (byte i=96; i<packetSize; i++){
           if (packetBuffer[i] <= 0x0F){
             msg += "0";
-            Serial.print(packetBuffer[i]);
+            
           }
           msg += String(packetBuffer[i]);
+          x++;
         }
+        Serial.print("Message: ");
         Serial.println(msg);
-
-        if (DEBUG){
-          Serial.print("Should have printed the msg above with length - ");
-          Serial.print(msg.length());
-          Serial.print(" - total packetSize =");
-          Serial.println(packetSize);
-        }
+        strBuff += msg;
 
         // send back an ACK
         
@@ -425,10 +432,9 @@ void loop() {
         }
 
         // set ack_num
-        num = last_received_seq_num + msg.length();
-
+        byte acknum = last_received_seq_num + x;
         for (byte i=0; i< 32; i++) {
-          replyHeader[63-i] = bitRead(num,i);
+          replyHeader[63-i] = bitRead(acknum,i);
         }
 
         // set SYN flag = 0
@@ -443,10 +449,7 @@ void loop() {
         // fill in the rest with zeros
         for (byte i=0; i<29; i++){
           replyHeader[95-i] = 0;
-        }
-        if (DEBUG){
-          Serial.println("After replyHeader is set");
-        }        
+        }      
         
         if (DEBUG){
           //print(pretty_bits_print(bits))
@@ -464,7 +467,7 @@ void loop() {
             Serial.print(replyHeader[i+32]);
           }
           Serial.print(" : ack = ");
-          Serial.println(last_received_seq_num+1);
+          Serial.println(acknum);
 
           // print last 32 bits with flags
           for (byte i=0; i<32; i++){
@@ -488,10 +491,121 @@ void loop() {
         Udp.endPacket();
       }
     }
+  } else if (server_state == "CLOSE_WAIT"){
+    // create a new ACK message to send back
+    uint8_t replyHeader[96];
+    
+    if (DEBUG){
+      //Serial.println("Inside CLOSE_WAIT - ");
+    }
+
+    // set sequence number
+    byte num = last_sent_ack_num;
+    for (byte i=0; i<32; i++) {
+      replyHeader[31-i] = bitRead(num, i);
+    }
+
+    // set ack_num
+    num = last_received_seq_num +1;
+    for (byte i=0; i< 32; i++) {
+      replyHeader[63-i] = bitRead(num,i);
+    }
+
+    // set SYN flag = 0
+    replyHeader[64] = 0;
+    
+    // set ACK flag = 1
+    replyHeader[65] = 1;
+
+    // set FIN flag = 1
+    replyHeader[66] = 1;
+
+    // fill in the rest with zeros
+    for (byte i=0; i<29; i++){
+      replyHeader[95-i] = 0;
+    }
+    
+    
+    if (DEBUG){
+      //print(pretty_bits_print(bits))
+
+      Serial.println("Sending Packet to Client");
+      // print first 32 bits in binary then print seq number in decimal
+      for (byte i=0; i<32; i++){
+        Serial.print(replyHeader[i]);
+      }
+      Serial.print(" : seq = ");
+      Serial.println(last_sent_ack_num);
+
+      // print next 32 bits in binary then ack_number
+      for (byte i=0; i<32; i++){
+        Serial.print(replyHeader[i+32]);
+      }
+      Serial.print(" : ack = ");
+      Serial.println(last_received_seq_num+1);
+
+      // print last 32 bits with flags
+      for (byte i=0; i<32; i++){
+        Serial.print(replyHeader[i+64]);
+      }
+      Serial.print(" : syn = ");
+      Serial.print(replyHeader[64]);
+      Serial.print(", ack = ");
+      Serial.print(replyHeader[65]);
+      Serial.print(", fin = ");
+      Serial.println(replyHeader[66]);
+    }
+
+    // increment seq_number for next time
+    last_sent_ack_num++;
+
+
+    // send the response back
+    Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+    Udp.write(replyHeader, 96);
+    Udp.endPacket();
+    
+    // update state to SYN_RECEIVED
+    update_server_state("LAST_ACK");
+  } else if (server_state == "LAST_ACK"){
+    int packetSize = Udp.parsePacket();
+
+    if (DEBUG){
+      //Serial.println("Inside LAST_ACK - ");
+    }
+
+    // if there is data in the packet
+    if (packetSize) {
+
+      // read all of the data and put it into packetBuffer
+      int len = Udp.read(packetBuffer, 1024);
+      if (len > 0) {
+        packetBuffer[len] = 0;
+      }
+
+
+      // save header's seq_num to last_received_seq_num
+      int header_seq_num = 0;
+      for (int bit =0; bit < 32; bit++){
+        header_seq_num <<= 1;
+        if(packetBuffer[bit] == '1') header_seq_num |= 1;
+      }
+      last_received_seq_num = header_seq_num;
+
+
+
+      // if FIN =1 then send back ack and move to close wait
+      if (packetBuffer[65] == '1'){
+        Serial.print("Full message from client: ");
+        Serial.println(strBuff);
+        update_server_state("CLOSED");
+      }
+    }
+
   } else {
     if(DEBUG){
-      Serial.print("Should be in state: ");
-      Serial.println(server_state);
+      //Serial.print("Should be in state: ");
+      //Serial.println(server_state);
     }
   }   
 }

@@ -110,6 +110,8 @@ class Client:
       # send to server
       send_udp(full_msg)
 
+      print(self.next_seq_num)
+
       # make sure we receive ack between each chunk
       try:
         recv_data, addr = sock.recvfrom(1024)
