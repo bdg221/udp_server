@@ -12,11 +12,13 @@
 #include <WiFiUdp.h>
 
 // Replace with your network credentials
-const char* ssid = "XXXXX";
-const char* password = "XXXXX";
+const char* ssid = "XXX";
+const char* password = "XXX";
 
 // UDP port to be used
 const int udp_port = 5005;
+
+const int delayTime = 1000;
 
 // Server variables 
 String server_state = "CLOSED";
@@ -104,6 +106,26 @@ void ledOff(int led_builtin){
  ************************************************************************************************/
 void ledOn(int led_builtin){
   digitalWrite(led_builtin, HIGH);
+}
+
+void blinkDelay(int led_builtin){
+
+  unsigned long previousMillis = 0;  // will store last time LED was updated
+
+  // constants won't change:
+  const long interval = (long)delayTime; 
+  unsigned long currentMillis = millis();
+    
+  unsigned long breakMillis = currentMillis + 500;
+  //Serial.println("in of blink delay");
+  while (currentMillis <= breakMillis) {
+    digitalWrite(led_builtin, HIGH);
+    delay(333);
+    digitalWrite(led_builtin, LOW);
+    delay(333);
+    currentMillis = millis();
+  }
+  //Serial.println("out of blink delay");
 }
 
 /************************************************************************************************
@@ -240,7 +262,7 @@ void loop() {
     /* 
      If the state of the server is CLOSED, set it to LISTEN 
      */
-
+    delay(delayTime);
     update_server_state("LISTEN");
   } else if (server_state == "LISTEN"){
     /* in state LISTEN
@@ -371,7 +393,9 @@ void loop() {
 
         // if delayFlag is true, add a 1 second delay
         if(delayFlag){
+          //Serial.println("Before SYN_REC delay");
           delay(1000);
+          //Serial.println("After SYN_REC delay");
         }
       }
     }
@@ -414,7 +438,9 @@ void loop() {
 
         // if delayFlag is true, add a 1 second delay
         if(delayFlag){
+          //Serial.println("Before ESTA delay");
           delay(1000);
+          //Serial.println("After ESTA delay");
         }
 
       }
@@ -519,6 +545,11 @@ void loop() {
         // increment seq_number for next time
         last_sent_ack_num++;
 
+        // if delayFlag is true, add a 1 second delay
+        if(delayFlag){
+          blinkDelay(output27);
+        }
+
 
         // send the response back
         Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
@@ -528,10 +559,7 @@ void loop() {
         // update state to CLOSE_WAIT
         update_server_state("CLOSE_WAIT");
 
-        // if delayFlag is true, add a 1 second delay
-        if(delayFlag){
-          delay(1000);
-        }
+
       } else{
         // In this section we are in ESTABLISHED and receiving data from the client. The
         // server needs to save the data and send back an ACK to the client with the
@@ -701,7 +729,7 @@ void loop() {
     Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
     Udp.write(replyHeader, 96);
     Udp.endPacket();
-    
+        
     // update state to SYN_RECEIVED
     update_server_state("LAST_ACK");
 
